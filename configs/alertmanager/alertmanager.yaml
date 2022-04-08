@@ -1,0 +1,24 @@
+global:
+  
+  resolve_timeout: 30s
+
+route:
+  receiver: "slack-notifications"
+  routes:
+  - match:
+      source: "testing"
+    group_by:
+    - "alertname"
+    group_wait: 30s
+    group_interval: 30s
+    repeat_interval: 1m
+  
+receivers:
+  - name: "slack-notifications"
+    slack_configs:
+      - channel: '#promalerts'
+        text: 'http://localhost:3000/d/12uUk0Jnk/new-dashboard-copy?orgId=1&var-device={{ .CommonLabels.server }}'
+        send_resolved: true
+
+templates:
+- '/etc/alertmanager/templates/*.tmpl'        

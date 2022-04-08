@@ -1,0 +1,14 @@
+groups:
+  - name: BGP Adjacency Change
+    rules:
+      - alert: bgpadjchangeflap
+        expr: sum by (device) (rate({device_role="spine", vendor_facility="BGP",vendor_facility_process="ADJCHANGE"}[5m])) * 100 > 1
+        for: 1m
+        labels:
+          severity: page
+          team: nre
+        annotations:
+          title: "High BGP Adjacency Flaps"
+          description: "High BGP adjacency flapping occuring"
+          summary: "High BGP adjacency flapping occuring on {{ $labels.device }}"
+          dashboard: "https://grafana-dashboard/device-log-dashboard"

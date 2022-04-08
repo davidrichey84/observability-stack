@@ -1,0 +1,7 @@
+[
+    {
+        "endpoints": [
+            "thanos-receive-2:10913"
+        ]
+    }
+]

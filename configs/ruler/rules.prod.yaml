@@ -1,0 +1,36 @@
+groups:
+  - name: high_cpu
+    rules:
+      - alert: HighCPU
+        expr: avg_over_time(environment_cpu_used{device_role="router"}[5m]) > 80
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          title: "High Device CPU"
+          description: "High CPU on {{ .Labels.instance }} over 10 minutes. CPU:"
+          summary: "High Device CPU on {{ .Labels.instance }}"
+
+  - name: high_bandwidth_routed_link
+    rules:
+      - alert: High Bandwidth Usage
+        expr: ((rate(interface_in_octets{device_role="router", intf_role="router"}[2m])*8 + rate(interface_out_octets{device_role="router", intf_role="router"}[2m])*8) / on(interface) interface_speed{device_role="router", intf_role="router"}) * 100 > 80
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          title: "High Routed Bandwidth Usage"
+          description: "High bandwidth usage on {{ .Labels.instance }} for routed link {{ .Labels.instance }}"
+          summary: "High bandwidth usage on {{ .Labels.instance }}"
+
+  - name: crit_infra_link_down
+    rules:
+      - alert: Critical Infra Link Down
+        expr: interface_admin_status{intf_role="router"} != 1
+        for: 2m
+        labels:
+          severity: high
+        annotations:
+          title: "Critical Infrastructure Link Down"
+          description: "Critical Infrastructure Link Down"
+          summary: "A critical infrastructure link {{ .Labels.instance }} is down on {{ .Labels.instance }}"

@@ -1,0 +1,24 @@
+groups:
+  - name: example
+    rules:
+      - alert: HighNumbers
+        expr: a_number_total{} > 20
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: high numbers
+
+  - name: host down
+    rules:
+      - alert: HostDown
+        #expr: delta(ping_result_code{}[5m]) > 0
+        #expr: ping_result_code{} offset 5m == 0 and ping_result_code{} == 1
+        #expr: net_response_result_code{} offset 5m == 0 and net_response_result_code{} != 0
+        expr: net_response_result_code{server="192.168.1.153"} != 0
+        for: 30s
+        labels:
+          severity: critical
+          source: testing
+        annotations:
+          summary: Host is down {{ $labels.instance }}

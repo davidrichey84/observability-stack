@@ -1,0 +1,24 @@
+rule_files:
+  - /etc/prometheus/alerting_rules.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'interface_in_octets{device_role="router", intf_role="router", interface="test1", device="router1"}'
+        values: '400000000 400000000 400000000 400000000 400000000 400000000 400000000 400000000 400000000 400000000'
+      - series: 'interface_out_octets{device_role="router", intf_role="router", interface="test1", device="router1"}'
+        values: '100000000 100000000 100000000 100000000 450000000 450000000 450000000 450000000 450000000 450000000'
+      - series: 'interface_speed{device_role="router", intf_role="router", interface="test1", device="router1"}'
+        valued: '1000000000 1000000000 1000000000 1000000000 1000000000 1000000000 1000000000 1000000000 1000000000 1000000000'
+
+    alert_rule_test:
+      - alertname: high_bandwidth_routed_link
+        eval_time: 4m
+        exp_alerts:
+          - exp_labels:
+              instance: "prometheus:9100"
+              job: "node"
+              severity: "critical"
+            exp_annotations:
+              description: "Node exporter prometheus:9100 is down."
+              link: "https://example.com"

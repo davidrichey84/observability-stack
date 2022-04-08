@@ -1,0 +1,279 @@
+---
+version: '3.4'
+
+services:
+  telegraf:
+    image: telegraf:1.21.4
+    command: telegraf --config /etc/telegraf/telegraf.conf
+    privileged: true
+    cap_add:
+      - CAP_NET_RAW
+    volumes:
+      - ./configs/telegraf/telegraf-ping.conf:/etc/telegraf/telegraf.conf
+  
+  prometheus:
+    image: prom/prometheus:v2.26.0
+    command: 
+      - --storage.tsdb.retention.size=512MB 
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.min-block-duration=10m
+    ports:
+      - 9090:9090
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./configs/prometheus/sample/:/etc/prometheus/sample/
+    mem_limit: 4096m
+
+  minio:
+    image: minio/minio:RELEASE.2021-02-01T22-56-52Z
+    volumes:
+      - minio_data:/data
+    entrypoint: sh
+    command: -c 'mkdir -p /data/thanos_bucket && /usr/bin/minio server /data'
+    environment:
+      - MINIO_ACCESS_KEY=smth
+      - MINIO_SECRET_KEY=Need8Chars
+      - MINIO_PROMETHEUS_AUTH_TYPE=public
+    ports:
+      - 9000:9000
+
+  thanos-query:
+    image: quay.io/thanos/thanos:v0.19.0
+    depends_on:
+      - thanos-store
+#      - thanos-receive-1
+#      - thanos-receive-2
+    command:
+      - query
+      - --query.replica-label=receive_replica
+      - --http-address=0.0.0.0:10904
+      - --store=thanos-store:10905
+#      - --store=thanos-receive-1:10907
+#      - --store=thanos-receive-2:10913
+#      - --store=thanos-receive-3:10916recei
+      - --grpc-address=0.0.0.0:10903
+    ports:
+      - 10903:10903
+      - 10904:10904
+  
+  thanos-query-fe:
+    image: quay.io/thanos/thanos:v0.23.0
+    depends_on:
+      - thanos-query
+    command:
+      - query-frontend
+      - --query-frontend.downstream-url=http://thanos-query:10904
+      - --http-address=0.0.0.0:10999
+      - |
+        --query-range.response-cache-config=type: IN-MEMORY
+        config:
+          max_size: 100MB
+          validity: 0s
+      - |
+        --query-frontend.downstream-tripper-config=
+          max_idle_conns_per_host: 100
+    ports:
+      - 10999:10999
+
+  thanos-store:
+    image: thanosio/thanos:main-2021-03-04-befb0257
+    depends_on:
+      - minio
+    volumes:
+      - ./configs/thanos/bucket_config.yaml:/etc/thanos/bucket_config.yaml
+    command:
+      - store
+      - --objstore.config-file=/etc/thanos/bucket_config.yaml
+      - --data-dir=/tmp/thanos/store
+      - --grpc-address=0.0.0.0:10905
+      - --http-address=0.0.0.0:10906
+    ports:
+      - 10905:10905
+      - 10906:10906
+
+  thanos-receive-1:
+    image: quay.io/thanos/thanos:v0.19.0
+    depends_on:
+      - minio
+    volumes:
+      - ./configs/thanos/bucket_config.yaml:/etc/thanos/bucket_config.yaml
+      - ./configs/thanos/hashring-1.json:/etc/thanos/hashring.json
+    command:
+      - receive
+      - --objstore.config-file=/etc/thanos/bucket_config.yaml
+      - --tsdb.path="/prometheus"
+      - --grpc-address=0.0.0.0:10907
+      - --http-address=0.0.0.0:10909
+      - --receive.local-endpoint=thanos-receive-1:10907
+      - --receive.hashrings-file=/etc/thanos/hashring.json
+      - --remote-write.address=0.0.0.0:10908
+      - --label=receive_replica="1"
+      - --tsdb.retention=0d
+      - --log.level=debug
+    ports:
+      - 10907:10907
+      - 10908:10908
+      - 10909:10909
+
+#  thanos-receive-2:
+#    image: quay.io/thanos/thanos:v0.19.0
+#    #image: thanosio/thanos:main-2021-03-04-befb0257
+#    depends_on:
+#      - minio
+#    volumes:
+#      - ./configs/thanos/bucket_config.yaml:/etc/thanos/bucket_config.yaml
+#      - ./configs/thanos/hashring-2.json:/etc/thanos/hashring.json
+#    command:
+#      - receive
+#      - --objstore.config-file=/etc/thanos/bucket_config.yaml
+#      - --tsdb.path=\"/prometheus\"
+#      - --grpc-address=0.0.0.0:10913
+#      - --http-address=0.0.0.0:10915
+#      - --receive.local-endpoint=thanos-receive-2:10913
+#      - --receive.hashrings-file=/etc/thanos/hashring.json
+#      - --remote-write.address=0.0.0.0:10914
+#      - --label=receive_replica="1"
+#      - --tsdb.retention=0d
+#      - --log.level=debug
+#    ports:
+#      - 10913:10913
+#      - 10914:10914
+#      - 10915:10915
+
+#  thanos-receive-3:
+#    image: quay.io/thanos/thanos:v0.19.0
+#   #image: thanosio/thanos:main-2021-03-04-befb0257
+#    depends_on:
+#      - minio
+#    volumes:
+#      - ./configs/thanos/bucket_config.yaml:/etc/thanos/bucket_config.yaml
+#      - ./configs/thanos/hashring-3.json:/etc/thanos/hashring.json
+#    command:
+#      - receive
+#      - --objstore.config-file=/etc/thanos/bucket_config.yaml
+#      - --tsdb.path=\"/prometheus\"
+#      - --grpc-address=0.0.0.0:10916
+#      - --http-address=0.0.0.0:10918
+#      - --receive.local-endpoint=thanos-receive-3:10916
+#      - --receive.hashrings-file=/etc/thanos/hashring.json
+#      - --remote-write.address=0.0.0.0:10917
+#      - --label=receive_replica="1"
+#      - --tsdb.retention=0d
+#      - --log.level=debug
+#    ports:
+#      - 10916:10916
+#      - 10917:10917
+#      - 10918:10918
+
+#  thanos-compactor:
+#    image: quay.io/thanos/thanos:v0.19.0
+#    #image: thanosio/thanos:main-2021-03-04-befb0257
+#    depends_on:
+#      - minio
+#      - thanos-store
+#    volumes:
+#      - ./configs/thanos/bucket_config.yaml:/etc/thanos/bucket_config.yaml
+#    #depends_on: 
+#    #  - minio
+#    command:
+#      - compact
+#      - --wait
+#      - --objstore.config-file=/etc/thanos/bucket_config.yaml
+#      - --http-address=0.0.0.0:10912
+#      - --data-dir=/tmp/thanos/compact
+#    ports: 
+#      - 10912:10912
+#    restart: always
+
+#  thanos-bucket-web:
+#    image: quay.io/thanos/thanos:v0.19.0
+#    #image: thanosio/thanos:main-2021-03-04-befb0257
+#    depends_on:
+#      - minio
+#    volumes:
+#      - ./configs/thanos/bucket_config.yaml:/etc/thanos/bucket_config.yaml
+#    command:
+#        - 'tools'
+#        - 'bucket'
+#        - 'web'
+#        - '--http-address=0.0.0.0:10902'
+#        - '--log.level=debug'
+#        - '--objstore.config-file=/etc/thanos/bucket_config.yaml'
+#        - '--refresh=5m'
+#        - '--timeout=2m'
+#        - '--label=replica'
+#    ports:
+#        - 10902:10902
+
+  alertmanager:
+    image: prom/alertmanager
+    depends_on:
+      - prometheus
+    ports:
+      - 9093:9093
+    volumes:
+      - ./configs/alertmanager/alertmanager.yaml:/etc/alertmanager/alertmanager.yaml
+      - ./configs/alertmanager/templates/:/etc/alertmanager/templates/
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yaml'
+      - '--log.level=debug'
+#
+  #thanos-ruler:
+  #  image: thanosio/thanos:main-2021-03-04-befb0257
+  #  depends_on:
+  #    - minio
+  #    - thanos-store
+  #    - thanos-query
+  #  ports:
+  #    - 10920:10920
+  #    - 10921:10921
+  #  volumes:
+  #    - ./configs/thanos/bucket_config.yaml:/etc/thanos/bucket_config.yaml
+  #    - ./configs/ruler/rules.prod.yaml:/etc/ruler/rules.yml
+  #  command:
+  #    - 'rule'
+  #    - --eval-interval=30s
+  #    - --rule-file=/etc/ruler/rules.yml
+  #    - --alert.query-url=http://0.0.0.0:9091
+  #    - --alertmanagers.url=http://alertmanager:9093
+  #    - --query=thanos-query:10904
+  #    - --objstore.config-file=/etc/thanos/bucket_config.yaml
+  #    - --label=monitor_cluster="cluster1"
+  #    - --label=receive_replica="1"
+  #    - --http-address=0.0.0.0:10920
+  #    - --grpc-address=0.0.0.0:10921
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=hamedkarbasi93-nodegraphapi-datasource
+    ports:
+      - 3000:3000
+   # depends_on:
+    #  - thanos-store
+   #   - minio
+  
+  loki:
+    image: grafana/loki:2.2.1
+    ports:
+      - "3101:3101"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./configs/loki/local-config.yaml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    depends_on:
+      - minio
+      - grafana
+  
+  # Trino Test! 
+  #trino-coordinator:
+  #  image: trinodb/trino:latest
+  #  hostname: trino-coordinator
+  #  ports:
+  #    - '8085:8085'
+  #  volumes:
+  #    - ./configs/trino/etc:/etc/trino
+
+volumes:
+  minio_data: {}
+  loki_data:

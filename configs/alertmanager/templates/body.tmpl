@@ -1,0 +1,15 @@
+{{ define "__alert_body" }}
+<td class="content-block">
+    {{ if gt (len .Annotations) 0 }}<strong>Annotations</strong><br />{{ end }}
+    {{ range .Annotations.SortedPairs }}{{ .Name }} = {{ .Value }}<br />{{ end }}
+    <strong>Labels</strong><br />
+    Job: <strong>{{ .Labels.job }}</strong><br />
+    Protocol: <strong>{{ .Labels.protocol }}</strong><br />
+    Server: <strong>{{ .Labels.server }}</strong><br />
+    Severity: <strong>{{ .Labels.severity }}</strong><br />
+    
+    <strong>URLS</strong><br />
+    <a href='http://localhost:3000/'>Grafana</a><br />
+    <a href='http://localhost:8080/dcim/device/device_id'>Nautobot</a><br />
+</td>
+{{ end }}

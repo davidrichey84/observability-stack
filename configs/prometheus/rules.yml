@@ -1,0 +1,21 @@
+groups:
+  - name: example
+    rules:
+      - alert: HighNumbers
+        expr: a_number_total{} > 20
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: high numbers
+
+  - name: host down
+    rules:
+      - alert: HostDown
+        expr: delta(ping_result_code{}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          source: testing
+        annotations:
+          summary: Host is down {{ $labels.instance }}
